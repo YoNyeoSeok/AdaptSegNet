@@ -2,3 +2,8 @@
 *.pth
 *.png
 *.jpg
+
+data
+
+# vscode
+launch.json
