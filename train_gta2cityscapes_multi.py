@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 import random
 
 from model.deeplab_multi import DeeplabMulti
+from model.deeplabv3_multi import DeeplabV3Multi
 from model.discriminator import FCDiscriminator
 from utils.loss import CrossEntropy2d
 from dataset.gta5_dataset import GTA5DataSet
@@ -23,15 +24,15 @@ from dataset.cityscapes_dataset import cityscapesDataSet
 
 IMG_MEAN = np.array((104.00698793, 116.66876762, 122.67891434), dtype=np.float32)
 
-MODEL = 'DeepLab'
+MODEL = 'DeepLabV3'
 BATCH_SIZE = 1
 ITER_SIZE = 1
-NUM_WORKERS = 4
+NUM_WORKERS = 1 #4
 DATA_DIRECTORY = './data/GTA5'
 DATA_LIST_PATH = './dataset/gta5_list/train.txt'
 IGNORE_LABEL = 255
 INPUT_SIZE = '1280,720'
-DATA_DIRECTORY_TARGET = './data/Cityscapes/data'
+DATA_DIRECTORY_TARGET = './data/Cityscapes/'
 DATA_LIST_PATH_TARGET = './dataset/cityscapes_list/train.txt'
 INPUT_SIZE_TARGET = '1024,512'
 LEARNING_RATE = 2.5e-4
@@ -65,7 +66,7 @@ def get_arguments():
     """
     parser = argparse.ArgumentParser(description="DeepLab-ResNet Network")
     parser.add_argument("--model", type=str, default=MODEL,
-                        help="available options : DeepLab")
+                        help="available options : DeepLab, DeepLabV3")
     parser.add_argument("--target", type=str, default=TARGET,
                         help="available options : cityscapes")
     parser.add_argument("--batch-size", type=int, default=BATCH_SIZE,
@@ -183,8 +184,12 @@ def main():
     gpu = args.gpu
 
     # Create network
-    if args.model == 'DeepLab':
-        model = DeeplabMulti(num_classes=args.num_classes)
+    if 'DeepLab' in args.model:
+        if args.model == 'DeepLab':
+            model = DeeplabMulti(num_classes=args.num_classes)
+        elif args.model == 'DeepLabV3':
+            model = DeeplabV3Multi(num_classes=args.num_classes)
+
         if args.restore_from[:4] == 'http' :
             saved_state_dict = model_zoo.load_url(args.restore_from)
         else:
@@ -292,7 +297,7 @@ def main():
 
             # train with source
 
-            _, batch = trainloader_iter.next()
+            _, batch = trainloader_iter.__next__()
             images, labels, _, _ = batch
             images = Variable(images).cuda(args.gpu)
 
@@ -307,12 +312,12 @@ def main():
             # proper normalization
             loss = loss / args.iter_size
             loss.backward()
-            loss_seg_value1 += loss_seg1.data.cpu().numpy()[0] / args.iter_size
-            loss_seg_value2 += loss_seg2.data.cpu().numpy()[0] / args.iter_size
+            loss_seg_value1 += loss_seg1.data.cpu().numpy() / args.iter_size
+            loss_seg_value2 += loss_seg2.data.cpu().numpy() / args.iter_size
 
             # train with target
 
-            _, batch = targetloader_iter.next()
+            _, batch = targetloader_iter.__next__()
             images, _, _ = batch
             images = Variable(images).cuda(args.gpu)
 
@@ -334,8 +339,8 @@ def main():
             loss = args.lambda_adv_target1 * loss_adv_target1 + args.lambda_adv_target2 * loss_adv_target2
             loss = loss / args.iter_size
             loss.backward()
-            loss_adv_target_value1 += loss_adv_target1.data.cpu().numpy()[0] / args.iter_size
-            loss_adv_target_value2 += loss_adv_target2.data.cpu().numpy()[0] / args.iter_size
+            loss_adv_target_value1 += loss_adv_target1.data.cpu().numpy() / args.iter_size
+            loss_adv_target_value2 += loss_adv_target2.data.cpu().numpy() / args.iter_size
 
             # train D
 
@@ -365,8 +370,8 @@ def main():
             loss_D1.backward()
             loss_D2.backward()
 
-            loss_D_value1 += loss_D1.data.cpu().numpy()[0]
-            loss_D_value2 += loss_D2.data.cpu().numpy()[0]
+            loss_D_value1 += loss_D1.data.cpu().numpy()
+            loss_D_value2 += loss_D2.data.cpu().numpy()
 
             # train with target
             pred_target1 = pred_target1.detach()
@@ -387,8 +392,8 @@ def main():
             loss_D1.backward()
             loss_D2.backward()
 
-            loss_D_value1 += loss_D1.data.cpu().numpy()[0]
-            loss_D_value2 += loss_D2.data.cpu().numpy()[0]
+            loss_D_value1 += loss_D1.data.cpu().numpy()
+            loss_D_value2 += loss_D2.data.cpu().numpy()
 
         optimizer.step()
         optimizer_D1.step()
@@ -400,14 +405,14 @@ def main():
             i_iter, args.num_steps, loss_seg_value1, loss_seg_value2, loss_adv_target_value1, loss_adv_target_value2, loss_D_value1, loss_D_value2))
 
         if i_iter >= args.num_steps_stop - 1:
-            print 'save model ...'
+            print('save model ...')
             torch.save(model.state_dict(), osp.join(args.snapshot_dir, 'GTA5_' + str(args.num_steps_stop) + '.pth'))
             torch.save(model_D1.state_dict(), osp.join(args.snapshot_dir, 'GTA5_' + str(args.num_steps_stop) + '_D1.pth'))
             torch.save(model_D2.state_dict(), osp.join(args.snapshot_dir, 'GTA5_' + str(args.num_steps_stop) + '_D2.pth'))
             break
 
         if i_iter % args.save_pred_every == 0 and i_iter != 0:
-            print 'taking snapshot ...'
+            print('taking snapshot ...')
             torch.save(model.state_dict(), osp.join(args.snapshot_dir, 'GTA5_' + str(i_iter) + '.pth'))
             torch.save(model_D1.state_dict(), osp.join(args.snapshot_dir, 'GTA5_' + str(i_iter) + '_D1.pth'))
             torch.save(model_D2.state_dict(), osp.join(args.snapshot_dir, 'GTA5_' + str(i_iter) + '_D2.pth'))
